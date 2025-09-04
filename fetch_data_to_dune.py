@@ -1,4 +1,4 @@
-# efetch_data_to_dune.py
+# enhanced_fetch_data_to_dune.py
 """
 Розширений збір даних з Extended API для унікального аналізу біржі
 Збирає:
@@ -77,6 +77,7 @@ def fetch_trading_stats(chain: str, date: str) -> Dict:
         
         data = response.json()
         
+        # Обробляємо дані статистики
         if isinstance(data, dict) and 'data' in data:
             trading_data = data['data']
             if trading_data:
@@ -85,15 +86,14 @@ def fetch_trading_stats(chain: str, date: str) -> Dict:
                     'date': date,
                     'chain': chain,
                     'daily_volume': total_volume,
-                    'trades_count': len(trading_data),
-                    'timestamp': datetime.utcnow().isoformat() + "Z"
+                    'trades_count': len(trading_data)
                 }
         
-        return {'date': date, 'chain': chain, 'daily_volume': 0, 'trades_count': 0, 'timestamp': datetime.utcnow().isoformat() + "Z"}
+        return {'date': date, 'chain': chain, 'daily_volume': 0, 'trades_count': 0}
         
     except Exception as e:
         print(f"❌ Error fetching trading stats for {chain}: {e}")
-        return {'date': date, 'chain': chain, 'daily_volume': 0, 'trades_count': 0, 'timestamp': datetime.utcnow().isoformat() + "Z"}
+        return {'date': date, 'chain': chain, 'daily_volume': 0, 'trades_count': 0}
 
 def fetch_tvl_data() -> Optional[Dict]:
     """
@@ -124,25 +124,36 @@ def normalize_markets_data(markets: List[Dict], chain: str) -> List[Dict]:
         if not isinstance(market, dict):
             continue
             
+        # Отримуємо статистику ринку
         stats = market.get("marketStats", {})
         
+        # Створюємо запис з усіма доступними даними
         row = {
             "fetched_at": fetched_at,
             "chain": chain,
             "market": market.get("name", "UNKNOWN"),
+            
+            # Ціни
             "lastPrice": float(stats.get("lastPrice", 0) or 0),
             "bidPrice": float(stats.get("bidPrice", 0) or 0),
             "askPrice": float(stats.get("askPrice", 0) or 0),
             "markPrice": float(stats.get("markPrice", 0) or 0),
             "indexPrice": float(stats.get("indexPrice", 0) or 0),
+            
+            # Обсяги та інтереси
             "dailyVolume": float(stats.get("dailyVolume", 0) or 0),
             "dailyVolumeBase": float(stats.get("dailyVolumeBase", 0) or 0),
             "openInterest": float(stats.get("openInterest", 0) or 0),
+            
+            # Додаткові метрики
             "fundingRate": float(stats.get("fundingRate", 0) or 0),
             "priceChange24h": float(stats.get("priceChange24h", 0) or 0),
+            
+            # Розраховуємо spread
             "spread_pct": 0,
         }
         
+        # Розраховуємо spread якщо є bid та ask
         if row["bidPrice"] > 0 and row["askPrice"] > 0 and row["lastPrice"] > 0:
             row["spread_pct"] = (row["askPrice"] - row["bidPrice"]) / row["lastPrice"] * 100
             
@@ -151,22 +162,35 @@ def normalize_markets_data(markets: List[Dict], chain: str) -> List[Dict]:
     return rows
 
 def save_markets_data(df: pd.DataFrame):
-    """Зберігає дані ринків, додаючи до існуючих"""
+    """
+    Зберігає дані ринків з історією (додає нові записи)
+    """
     file_path = os.path.join(UPLOADS_DIR, "extended_markets_data.csv")
     
     if os.path.exists(file_path):
+        # Читаємо існуючі дані
         existing = pd.read_csv(file_path)
+        
+        # Об'єднуємо з новими
         combined = pd.concat([existing, df], ignore_index=True)
+        
+        # Сортуємо по часу (новіші записи зверху)
         combined = combined.sort_values('fetched_at', ascending=False)
+        
+        # Обмежуємо кількість записів (останні 50,000 щоб не перевищити ліміт Dune)
         combined = combined.head(50000)
+        
         combined.to_csv(file_path, index=False)
         print(f"✅ Updated markets data: {len(combined)} total rows")
     else:
+        # Створюємо новий файл
         df.to_csv(file_path, index=False)
         print(f"✅ Created markets data file: {len(df)} rows")
 
 def save_trading_stats(stats_list: List[Dict]):
-    """Зберігає статистику торгів, додаючи до існуючих"""
+    """
+    Зберігає статистику торгів
+    """
     if not stats_list:
         print("⚠️ No trading stats to save")
         return
@@ -176,6 +200,8 @@ def save_trading_stats(stats_list: List[Dict]):
     
     if os.path.exists(file_path):
         existing = pd.read_csv(file_path)
+        
+        # Уникаємо дублікатів по даті та мережі
         existing_keys = set(zip(existing['date'], existing['chain']))
         new_data = [stat for stat in stats_list 
                    if (stat['date'], stat['chain']) not in existing_keys]
@@ -193,29 +219,32 @@ def save_trading_stats(stats_list: List[Dict]):
         print(f"✅ Created trading stats file: {len(df)} rows")
 
 def save_tvl_data(tvl_data: Dict):
-    """Зберігає TVL дані, додаючи до існуючих (з перевіркою дублікатів по даті)"""
+    """
+    Зберігає TVL дані з часовою міткою
+    """
     if not tvl_data:
         print("⚠️ No TVL data to save")
         return
         
+    # Додаємо часову мітку
     current_time = datetime.utcnow().isoformat() + "Z"
-    date_str = datetime.utcnow().strftime('%Y-%m-%d')
     
+    # Витягуємо TVL по мережах
     tvl_records = []
     
+    # Загальний TVL
     total_tvl = tvl_data.get('tvl', 0)
     tvl_records.append({
         'fetched_at': current_time,
-        'date': date_str,
         'chain': 'total',
         'tvl_usd': total_tvl
     })
     
+    # TVL по окремих мережах
     chain_tvls = tvl_data.get('chainTvls', {})
     for chain, tvl_value in chain_tvls.items():
         tvl_records.append({
             'fetched_at': current_time,
-            'date': date_str,
             'chain': chain.lower(),
             'tvl_usd': tvl_value
         })
@@ -225,27 +254,15 @@ def save_tvl_data(tvl_data: Dict):
         file_path = os.path.join(UPLOADS_DIR, "extended_tvl_data.csv")
         
         if os.path.exists(file_path):
-            # Читаємо існуючі дані
             existing = pd.read_csv(file_path)
-            print(f"📖 Found existing TVL data: {len(existing)} rows")
-            
-            # Перевіряємо дублікати по даті та мережі
-            existing_keys = set(zip(existing['date'], existing['chain']))
-            new_records = [record for record in tvl_records 
-                         if (record['date'], record['chain']) not in existing_keys]
-            
-            if new_records:
-                new_df = pd.DataFrame(new_records)
-                combined = pd.concat([existing, new_df], ignore_index=True)
-                combined = combined.sort_values('fetched_at', ascending=False)
-                combined = combined.head(10000)
-                combined.to_csv(file_path, index=False)
-                print(f"✅ ADDED {len(new_records)} new TVL records. Total: {len(combined)} rows")
-            else:
-                print("ℹ️ No new TVL data to add (already exists for today)")
+            combined = pd.concat([existing, df], ignore_index=True)
+            combined = combined.sort_values('fetched_at', ascending=False)
+            combined = combined.head(10000)  # Зберігаємо останні 10к записів
+            combined.to_csv(file_path, index=False)
+            print(f"✅ Updated TVL data: {len(df)} new rows")
         else:
             df.to_csv(file_path, index=False)
-            print(f"✅ Created new TVL data file: {len(df)} rows")
+            print(f"✅ Created TVL data file: {len(df)} rows")
 
 def main():
     """
@@ -257,7 +274,7 @@ def main():
     all_markets_data = []
     trading_stats = []
     
-    # ЗБИРАЄМО ДАНІ РИНКІВ
+    # === 1. ЗБИРАЄМО ДАНІ РИНКІВ ===
     for chain in ['ethereum', 'starknet']:
         markets = fetch_markets_data(chain)
         if markets:
@@ -269,11 +286,13 @@ def main():
         save_markets_data(markets_df)
         print(f"📊 Processed {len(all_markets_data)} market records")
     
-    # ЗБИРАЄМО СТАТИСТИКУ ТОРГІВ
+    # === 2. ЗБИРАЄМО СТАТИСТИКУ ТОРГІВ ===
+    # Збираємо дані за останні 7 днів
     for days_back in range(7):
         date = (datetime.now() - timedelta(days=days_back)).strftime('%Y-%m-%d')
         
         for chain in ['ethereum', 'starknet']:
+            # Перевіряємо чи ця мережа була активна на ту дату
             start_date = datetime.strptime(ENDPOINTS[chain]['start_date'], '%Y-%m-%d')
             check_date = datetime.strptime(date, '%Y-%m-%d')
             
@@ -284,7 +303,7 @@ def main():
     if trading_stats:
         save_trading_stats(trading_stats)
     
-    # ЗБИРАЄМО TVL ДАНІ
+    # === 3. ЗБИРАЄМО TVL ДАНІ ===
     tvl_data = fetch_tvl_data()
     if tvl_data:
         save_tvl_data(tvl_data)
