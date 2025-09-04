@@ -1,4 +1,4 @@
-# enhanced_fetch_data_to_dune.py
+# efetch_data_to_dune.py
 """
 Розширений збір даних з Extended API для унікального аналізу біржі
 Збирає:
