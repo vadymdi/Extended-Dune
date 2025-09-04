@@ -1,2 +1,4 @@
-
 .env
+uploads/*.csv
+__pycache__/
+*.pyc
