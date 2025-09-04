@@ -1,15 +1,19 @@
-name: Update Extended Data to Dune
+name: Extended Exchange Data Pipeline
 
 on:
   schedule:
-    - cron: "0 */1 * * *"    # кожні 6 годин
+    - cron: "0 */3 * * *"    # кожні 3 години для актуальних даних
   workflow_dispatch:          # можна запускати вручну
+  push:
+    branches: [ main ]
+    paths: 
+      - 'enhanced_fetch_data_to_dune.py'  # перезапускати при зміні коду збору
 
 permissions:
   contents: write
 
 jobs:
-  update-dune-data:
+  collect-and-upload:
     runs-on: ubuntu-latest
     
     steps:
@@ -28,29 +32,48 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
           
-      - name: Fetch Extended data and save to uploads/
+      - name: Collect Extended Exchange data
         run: |
-          python fetch_data_to_dune.py
+          echo "🚀 Starting Extended data collection..."
+          python enhanced_fetch_data_to_dune.py
           
-      - name: Show uploads directory
+      - name: Show collected data
         run: |
-          echo "Contents of uploads directory:"
-          ls -la uploads/ || echo "uploads/ directory not found"
+          echo "📊 Data collection summary:"
+          echo "----------------------------------------"
+          for file in uploads/*.csv; do
+            if [ -f "$file" ]; then
+              filename=$(basename "$file")
+              lines=$(wc -l < "$file")
+              size=$(du -h "$file" | cut -f1)
+              echo "📄 $filename: $lines lines, $size"
+              echo "   Latest entries:"
+              head -3 "$file" | tail -2 || true
+              echo "----------------------------------------"
+            fi
+          done
           
-      - name: Upload to Dune Analytics
+      - name: Upload all data to Dune Analytics
         env:
           DUNE_API_KEY: ${{ secrets.DUNE_API_KEY }}
         run: |
+          echo "⬆️ Uploading to Dune Analytics..."
           python scripts/upload_to_dune.py
           
-      - name: Commit and push changes (if any)
+      - name: Commit and push updated data
         run: |
-          git config user.name "github-actions"
-          git config user.email "actions@github.com"
+          git config user.name "extended-data-bot"
+          git config user.email "bot@extended-data.com"
           git add uploads/
           if git diff --cached --quiet; then
-            echo "No changes to commit"
+            echo "ℹ️ No changes to commit"
           else
-            git commit -m "Update Extended markets data [automated]" || true
-            git push origin HEAD:main || echo "Push failed or no changes"
+            git commit -m "📊 Update Extended Exchange data $(date -u '+%Y-%m-%d %H:%M UTC')" || true
+            git push origin HEAD:main || echo "⚠️ Push failed or no changes"
           fi
+          
+      - name: Summary report
+        run: |
+          echo "✅ Extended Exchange data pipeline completed!"
+          echo "🔗 Check your Dune analytics dashboard for updated data"
+          echo "📅 Next run: in 3 hours"
