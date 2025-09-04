@@ -1,72 +1,86 @@
 #!/usr/bin/env python3
 """
-Скрипт для загрузки CSV файлів в Dune Analytics
+Скрипт для загрузки CSV файлів в Dune Analytics через REST API
 """
 
 import os
 import sys
-from pathlib import Path
-from dune_client.client import DuneClient
-from dune_client.api.table import InsertTableRequest
-from dune_client.types import Address
+import requests
 import pandas as pd
+from pathlib import Path
 
-# Додаємо папку проекту в sys.path
-sys.path.append(str(Path(__file__).parent.parent))
-
-def get_dune_client():
-    """Створює клієнт Dune з API ключем"""
-    api_key = os.getenv('DUNE_API_KEY')
-    if not api_key:
-        raise ValueError("❌ DUNE_API_KEY environment variable not set!")
+def upload_csv_to_dune(csv_path: str, table_name: str, api_key: str):
+    """Загружає CSV файл в Dune через REST API"""
     
-    print("✅ Dune API key found")
-    return DuneClient(api_key)
-
-def upload_csv_to_dune(client, csv_path: str, table_name: str):
-    """Загружає CSV файл в Dune таблицю"""
     if not os.path.exists(csv_path):
         print(f"⚠️ File not found: {csv_path}")
         return False
     
     try:
-        # Читаємо CSV
-        df = pd.read_csv(csv_path)
-        print(f"📊 Loading {csv_path}: {len(df)} rows")
+        # Перевіряємо розмір файлу (ліміт 200MB)
+        file_size = os.path.getsize(csv_path)
+        file_size_mb = file_size / (1024 * 1024)
         
-        if len(df) == 0:
-            print(f"⚠️ Empty file: {csv_path}")
+        if file_size_mb > 200:
+            print(f"❌ File too large: {file_size_mb:.1f}MB (limit: 200MB)")
             return False
+            
+        print(f"📊 Uploading {csv_path} ({file_size_mb:.2f}MB) as table '{table_name}'...")
         
-        # Створюємо запит для загрузки
-        table_request = InsertTableRequest(
-            table_name=table_name,
-            data=df,
-            is_private=False  # Публічна таблиця
-        )
+        # URL для загрузки
+        url = "https://api.dune.com/api/v1/table/upload/csv"
         
-        # Загружаємо в Dune
-        response = client.insert_table(table_request)
-        print(f"✅ Uploaded {csv_path} to dune.vadymdi.dataset_{table_name}")
-        return True
+        # Headers
+        headers = {
+            'X-DUNE-API-KEY': api_key
+        }
         
+        # Підготовка файлу та даних
+        with open(csv_path, 'rb') as f:
+            files = {
+                'data': (os.path.basename(csv_path), f, 'text/csv')
+            }
+            
+            data = {
+                'table_name': table_name,
+                'description': f'Extended Exchange data: {table_name}',
+                'is_private': 'false'
+            }
+            
+            # Відправляємо запит
+            response = requests.post(url, headers=headers, files=files, data=data)
+        
+        if response.status_code == 200:
+            print(f"✅ Successfully uploaded to dune.vadymdi.dataset_{table_name}")
+            return True
+        else:
+            print(f"❌ Upload failed: {response.status_code}")
+            try:
+                error_detail = response.json()
+                print(f"   Error: {error_detail}")
+            except:
+                print(f"   Response: {response.text}")
+            return False
+            
     except Exception as e:
         print(f"❌ Error uploading {csv_path}: {e}")
         return False
 
 def main():
     """Головна функція загрузки"""
+    
+    # Перевіряємо API ключ
+    api_key = os.getenv('DUNE_API_KEY')
+    if not api_key:
+        print("❌ DUNE_API_KEY environment variable not set!")
+        return False
+    
+    print("✅ Dune API key found")
+    
     uploads_dir = "uploads"
     
     if not os.path.exists(uploads_dir):
         print("❌ uploads/ directory not found")
-        return False
-    
-    # Отримуємо клієнт Dune
-    try:
-        dune = get_dune_client()
-    except Exception as e:
-        print(f"❌ Failed to create Dune client: {e}")
         return False
     
     # Мапінг файлів до назв таблиць в Dune
@@ -74,7 +88,7 @@ def main():
         "extended_markets_data.csv": "extended_markets_data",
         "extended_trading_stats.csv": "extended_trading_stats", 
         "extended_tvl_data.csv": "extended_tvl_data",
-        "extended_onchain_metrics.csv": "extended_onchain_metrics"
+        "FEDFUNDS.csv": "fedfunds"
     }
     
     success_count = 0
@@ -83,34 +97,53 @@ def main():
     print("🚀 Starting upload to Dune Analytics...")
     print("=" * 50)
     
-    # Загружаємо всі знайдені файли
+    # Перевіряємо які файли є в uploads
+    available_files = os.listdir(uploads_dir)
+    csv_files = [f for f in available_files if f.endswith('.csv')]
+    
+    print(f"📁 Found {len(csv_files)} CSV files in uploads/:")
+    for f in csv_files:
+        file_path = os.path.join(uploads_dir, f)
+        size = os.path.getsize(file_path) / 1024  # KB
+        print(f"   📄 {f} ({size:.1f}KB)")
+    print("-" * 30)
+    
+    # Загружаємо відомі файли
     for filename, table_name in file_mappings.items():
         file_path = os.path.join(uploads_dir, filename)
         
         if os.path.exists(file_path):
             total_files += 1
-            if upload_csv_to_dune(dune, file_path, table_name):
+            if upload_csv_to_dune(file_path, table_name, api_key):
                 success_count += 1
             print("-" * 30)
     
-    # Загружаємо також FEDFUNDS.csv якщо є
-    fedfunds_path = os.path.join(uploads_dir, "FEDFUNDS.csv")
-    if os.path.exists(fedfunds_path):
-        total_files += 1
-        if upload_csv_to_dune(dune, fedfunds_path, "fedfunds"):
-            success_count += 1
+    # Загружаємо інші CSV файли які знайшли
+    for csv_file in csv_files:
+        if csv_file not in file_mappings:
+            file_path = os.path.join(uploads_dir, csv_file)
+            table_name = csv_file.replace('.csv', '').lower()
+            
+            total_files += 1
+            print(f"📄 Found additional file: {csv_file}")
+            if upload_csv_to_dune(file_path, table_name, api_key):
+                success_count += 1
+            print("-" * 30)
     
     print("=" * 50)
     print(f"📊 Upload Summary: {success_count}/{total_files} files uploaded successfully")
     
-    if success_count == total_files and total_files > 0:
+    if total_files == 0:
+        print("⚠️ No CSV files found to upload")
+        return False
+    elif success_count == total_files:
         print("✅ All uploads completed successfully!")
         return True
     elif success_count > 0:
-        print("⚠️ Some uploads completed with warnings")
+        print("⚠️ Some uploads completed with errors")
         return True
     else:
-        print("❌ Upload failed!")
+        print("❌ All uploads failed!")
         return False
 
 if __name__ == "__main__":
