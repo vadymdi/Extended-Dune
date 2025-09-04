@@ -7,7 +7,7 @@ on:
   push:
     branches: [ main ]
     paths: 
-      - 'enhanced_fetch_data_to_dune.py'  # перезапускати при зміні коду збору
+      - 'fetch_data_to_dune.py'  # перезапускати при зміні коду збору
 
 permissions:
   contents: write
@@ -35,7 +35,7 @@ jobs:
       - name: Collect Extended Exchange data
         run: |
           echo "🚀 Starting Extended data collection..."
-          python enhanced_fetch_data_to_dune.py
+          python fetch_data_to_dune.py
           
       - name: Show collected data
         run: |
