@@ -2,7 +2,7 @@ name: Update Extended Data to Dune
 
 on:
   schedule:
-    - cron: "0 */6 * * *"    # кожні 6 годин
+    - cron: "0 */1 * * *"    # кожні 6 годин
   workflow_dispatch:          # можна запускати вручну
 
 permissions:
