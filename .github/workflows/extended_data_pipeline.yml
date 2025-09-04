@@ -37,7 +37,7 @@ jobs:
         run: |
           echo "🚀 Starting Extended data collection..."
           echo "📅 Collection time: $(date -u '+%Y-%m-%d %H:%M UTC')"
-          python fetch_data_to_dune.py
+          python efetch_data_to_dune.py
           
       - name: Validate collected data
         run: |
