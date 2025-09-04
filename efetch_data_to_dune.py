@@ -193,7 +193,7 @@ def save_trading_stats(stats_list: List[Dict]):
         print(f"✅ Created trading stats file: {len(df)} rows")
 
 def save_tvl_data(tvl_data: Dict):
-    """Зберігає TVL дані з часовою міткою"""
+    """Зберігає TVL дані, додаючи до існуючих (з перевіркою дублікатів по даті)"""
     if not tvl_data:
         print("⚠️ No TVL data to save")
         return
@@ -225,15 +225,27 @@ def save_tvl_data(tvl_data: Dict):
         file_path = os.path.join(UPLOADS_DIR, "extended_tvl_data.csv")
         
         if os.path.exists(file_path):
+            # Читаємо існуючі дані
             existing = pd.read_csv(file_path)
-            combined = pd.concat([existing, df], ignore_index=True)
-            combined = combined.sort_values('fetched_at', ascending=False)
-            combined = combined.head(10000)
-            combined.to_csv(file_path, index=False)
-            print(f"✅ Updated TVL data: {len(df)} new rows")
+            print(f"📖 Found existing TVL data: {len(existing)} rows")
+            
+            # Перевіряємо дублікати по даті та мережі
+            existing_keys = set(zip(existing['date'], existing['chain']))
+            new_records = [record for record in tvl_records 
+                         if (record['date'], record['chain']) not in existing_keys]
+            
+            if new_records:
+                new_df = pd.DataFrame(new_records)
+                combined = pd.concat([existing, new_df], ignore_index=True)
+                combined = combined.sort_values('fetched_at', ascending=False)
+                combined = combined.head(10000)
+                combined.to_csv(file_path, index=False)
+                print(f"✅ ADDED {len(new_records)} new TVL records. Total: {len(combined)} rows")
+            else:
+                print("ℹ️ No new TVL data to add (already exists for today)")
         else:
             df.to_csv(file_path, index=False)
-            print(f"✅ Created TVL data file: {len(df)} rows")
+            print(f"✅ Created new TVL data file: {len(df)} rows")
 
 def main():
     """
