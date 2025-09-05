@@ -1,4 +1,4 @@
-name: Extended Exchange Data Collection & Upload
+name: Extended Exchange Data Collection
 
 on:
   schedule:
@@ -10,21 +10,20 @@ on:
     branches: [ main ]
     paths: 
       - 'enhanced_fetch_data_to_dune.py'
-      - '.github/workflows/**'
 
 jobs:
-  collect-and-upload-data:
+  collect-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
       
-    - name: Set up Python 3.11
+    - name: Set up Python 3.10
       uses: actions/setup-python@v4
       with:
-        python-version: '3.11'
+        python-version: '3.10'
         cache: 'pip'
         
     - name: Install dependencies
@@ -32,45 +31,27 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         
-    - name: Create uploads directory
-      run: mkdir -p uploads
-      
     - name: Run enhanced data collection
       run: |
+        echo "🚀 Starting enhanced data collection..."
         python enhanced_fetch_data_to_dune.py
-      env:
-        PYTHONIOENCODING: utf-8
+        echo "✅ Data collection completed"
         
     - name: Check collected data
       run: |
         echo "📊 Data collection results:"
-        ls -la uploads/
-        if [ -f "uploads/extended_markets_data.csv" ]; then
-          echo "Markets data: $(wc -l < uploads/extended_markets_data.csv) rows"
-        fi
-        if [ -f "uploads/extended_trading_stats.csv" ]; then
-          echo "Trading stats: $(wc -l < uploads/extended_trading_stats.csv) rows"
-        fi
-        if [ -f "uploads/extended_tvl_data.csv" ]; then
-          echo "TVL data: $(wc -l < uploads/extended_tvl_data.csv) rows"
-        fi
-        if [ -f "uploads/extended_funding_rates.csv" ]; then
-          echo "Funding rates: $(wc -l < uploads/extended_funding_rates.csv) rows"
-        fi
-        if [ -f "uploads/extended_orderbook_snapshots.csv" ]; then
-          echo "Orderbook snapshots: $(wc -l < uploads/extended_orderbook_snapshots.csv) rows"
-        fi
+        ls -la uploads/ || echo "uploads/ directory not found"
+        
+        for file in uploads/*.csv; do
+          if [ -f "$file" ]; then
+            echo "📄 $(basename "$file"): $(wc -l < "$file") rows"
+          fi
+        done
         
     - name: Upload to Dune Analytics
-      run: |
-        python scripts/upload_to_dune.py
       env:
         DUNE_API_KEY: ${{ secrets.DUNE_API_KEY }}
-        
-    - name: Upload artifacts for debugging
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: extended-exchange-data-${{ github.run_number }}
-        path: uploads/
-        retention-days: 7
+      run: |
+        echo "⬆️ Uploading to Dune Analytics..."
+        python scripts/upload_to_dune.py
+        echo "✅ Upload completed"
