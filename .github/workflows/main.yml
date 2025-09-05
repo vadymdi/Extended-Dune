@@ -34,7 +34,7 @@ jobs:
     - name: Run enhanced data collection
       run: |
         echo "🚀 Starting enhanced data collection..."
-        python enhanced_fetch_data_to_dune.py
+        python fetch_data_to_dune.py
         echo "✅ Data collection completed"
         
     - name: Check collected data
