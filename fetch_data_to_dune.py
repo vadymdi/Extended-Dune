@@ -363,10 +363,10 @@ def main():
         funding_df = pd.DataFrame(all_funding_data)
         save_data_with_deduplication(funding_df, "extended_funding_rates.csv", ['chain', 'market', 'funding_time'])
     
-    # Зберігаємо orderbook data
-    if all_orderbook_data:
-        orderbook_df = pd.DataFrame(all_orderbook_data)
-        save_data_with_deduplication(orderbook_df, "extended_orderbook_snapshots.csv", ['chain', 'market', 'fetched_at'])
+    # Orderbook відключений через помилки API
+    # if all_orderbook_data:
+    #     orderbook_df = pd.DataFrame(all_orderbook_data)
+    #     save_data_with_deduplication(orderbook_df, "extended_orderbook_snapshots.csv", ['chain', 'market', 'fetched_at'])
     
     # === 2. ЗБИРАЄМО СТАТИСТИКУ ТОРГІВ ===
     trading_stats = []
