@@ -1,79 +1,76 @@
-name: Extended Exchange Data Pipeline
+name: Extended Exchange Data Collection & Upload
 
 on:
   schedule:
-    - cron: "0 */3 * * *"    # кожні 3 години для актуальних даних
-  workflow_dispatch:          # можна запускати вручну
+    # Запускаємо кожні 6 годин
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    # Можна запустити вручну
   push:
     branches: [ main ]
     paths: 
-      - 'enhanced_fetch_data_to_dune.py'  # перезапускати при зміні коду збору
-
-permissions:
-  contents: write
+      - 'enhanced_fetch_data_to_dune.py'
+      - '.github/workflows/**'
 
 jobs:
-  collect-and-upload:
+  collect-and-upload-data:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v3
-        with:
-          persist-credentials: true
-          
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: "3.10"
-          
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          
-      - name: Collect Extended Exchange data
-        run: |
-          echo "🚀 Starting Extended data collection..."
-          python enhanced_fetch_data_to_dune.py
-          
-      - name: Show collected data
-        run: |
-          echo "📊 Data collection summary:"
-          echo "----------------------------------------"
-          for file in uploads/*.csv; do
-            if [ -f "$file" ]; then
-              filename=$(basename "$file")
-              lines=$(wc -l < "$file")
-              size=$(du -h "$file" | cut -f1)
-              echo "📄 $filename: $lines lines, $size"
-              echo "   Latest entries:"
-              head -3 "$file" | tail -2 || true
-              echo "----------------------------------------"
-            fi
-          done
-          
-      - name: Upload all data to Dune Analytics
-        env:
-          DUNE_API_KEY: ${{ secrets.DUNE_API_KEY }}
-        run: |
-          echo "⬆️ Uploading to Dune Analytics..."
-          python scripts/upload_to_dune.py
-          
-      - name: Commit and push updated data
-        run: |
-          git config user.name "extended-data-bot"
-          git config user.email "bot@extended-data.com"
-          git add uploads/
-          if git diff --cached --quiet; then
-            echo "ℹ️ No changes to commit"
-          else
-            git commit -m "📊 Update Extended Exchange data $(date -u '+%Y-%m-%d %H:%M UTC')" || true
-            git push origin HEAD:main || echo "⚠️ Push failed or no changes"
-          fi
-          
-      - name: Summary report
-        run: |
-          echo "✅ Extended Exchange data pipeline completed!"
-          echo "🔗 Check your Dune analytics dashboard for updated data"
-          echo "📅 Next run: in 3 hours"
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+        
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: Create uploads directory
+      run: mkdir -p uploads
+      
+    - name: Run enhanced data collection
+      run: |
+        python enhanced_fetch_data_to_dune.py
+      env:
+        PYTHONIOENCODING: utf-8
+        
+    - name: Check collected data
+      run: |
+        echo "📊 Data collection results:"
+        ls -la uploads/
+        if [ -f "uploads/extended_markets_data.csv" ]; then
+          echo "Markets data: $(wc -l < uploads/extended_markets_data.csv) rows"
+        fi
+        if [ -f "uploads/extended_trading_stats.csv" ]; then
+          echo "Trading stats: $(wc -l < uploads/extended_trading_stats.csv) rows"
+        fi
+        if [ -f "uploads/extended_tvl_data.csv" ]; then
+          echo "TVL data: $(wc -l < uploads/extended_tvl_data.csv) rows"
+        fi
+        if [ -f "uploads/extended_funding_rates.csv" ]; then
+          echo "Funding rates: $(wc -l < uploads/extended_funding_rates.csv) rows"
+        fi
+        if [ -f "uploads/extended_orderbook_snapshots.csv" ]; then
+          echo "Orderbook snapshots: $(wc -l < uploads/extended_orderbook_snapshots.csv) rows"
+        fi
+        
+    - name: Upload to Dune Analytics
+      run: |
+        python scripts/upload_to_dune.py
+      env:
+        DUNE_API_KEY: ${{ secrets.DUNE_API_KEY }}
+        
+    - name: Upload artifacts for debugging
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: extended-exchange-data-${{ github.run_number }}
+        path: uploads/
+        retention-days: 7
