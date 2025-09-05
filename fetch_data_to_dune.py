@@ -286,32 +286,49 @@ def save_data_with_deduplication(df: pd.DataFrame, filename: str, unique_columns
         print(f"✅ Created {filename}: {len(df)} rows")
 
 def save_tvl_data(tvl_data: Dict):
-    """Зберігає TVL дані з часовою міткою"""
+    """Зберігає TVL дані з часовою міткою та історичними даними"""
     if not tvl_data:
         print("⚠️ No TVL data to save")
         return
         
     current_time = datetime.utcnow().isoformat() + "Z"
+    current_date = current_time[:10]  # YYYY-MM-DD
     tvl_records = []
     
-    # Загальний TVL
+    # Загальний поточний TVL
     total_tvl = tvl_data.get('tvl', 0)
     tvl_records.append({
         'fetched_at': current_time,
+        'date': current_date,
         'chain': 'total',
-        'tvl_usd': total_tvl,
-        'date': current_time[:10]  # YYYY-MM-DD
+        'tvl_usd': total_tvl
     })
     
-    # TVL по окремих мережах
+    # TVL по окремих мережах (поточний)
     chain_tvls = tvl_data.get('chainTvls', {})
     for chain, tvl_value in chain_tvls.items():
         tvl_records.append({
             'fetched_at': current_time,
+            'date': current_date,
             'chain': chain.lower(),
-            'tvl_usd': tvl_value,
-            'date': current_time[:10]
+            'tvl_usd': tvl_value
         })
+    
+    # Обробляємо історичні дані якщо є
+    chains_data = tvl_data.get('chains', {})
+    for chain_name, chain_info in chains_data.items():
+        if isinstance(chain_info, dict) and 'tvl' in chain_info:
+            historical_tvl = chain_info['tvl']
+            if isinstance(historical_tvl, list):
+                for point in historical_tvl[-30:]:  # Останні 30 точок
+                    if isinstance(point, dict) and 'date' in point:
+                        historical_date = datetime.fromtimestamp(point['date']).strftime('%Y-%m-%d')
+                        tvl_records.append({
+                            'fetched_at': current_time,
+                            'date': historical_date,
+                            'chain': chain_name.lower(),
+                            'tvl_usd': point.get('totalLiquidityUSD', 0)
+                        })
     
     if tvl_records:
         df = pd.DataFrame(tvl_records)
