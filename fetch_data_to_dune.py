@@ -286,36 +286,46 @@ def save_data_with_deduplication(df: pd.DataFrame, filename: str, unique_columns
         print(f"✅ Created {filename}: {len(df)} rows")
 
 def save_tvl_data(tvl_data: Dict):
-    """Зберігає TVL дані з часовою міткою"""
+    """Зберігає TVL дані з часовою міткою - простий формат"""
     if not tvl_data:
         print("⚠️ No TVL data to save")
         return
         
-    current_time = datetime.utcnow().isoformat() + "Z"
-    tvl_records = []
-    
-    # Загальний TVL
-    total_tvl = tvl_data.get('tvl', 0)
-    tvl_records.append({
-        'fetched_at': current_time,
-        'chain': 'total',
-        'tvl_usd': total_tvl,
-        'date': current_time[:10]  # YYYY-MM-DD
-    })
-    
-    # TVL по окремих мережах
-    chain_tvls = tvl_data.get('chainTvls', {})
-    for chain, tvl_value in chain_tvls.items():
-        tvl_records.append({
-            'fetched_at': current_time,
-            'chain': chain.lower(),
-            'tvl_usd': tvl_value,
-            'date': current_time[:10]
-        })
-    
-    if tvl_records:
-        df = pd.DataFrame(tvl_records)
-        save_data_with_deduplication(df, "extended_tvl_data.csv", ['date', 'chain'])
+    try:
+        current_time = datetime.utcnow().isoformat() + "Z"
+        current_date = current_time[:10]  # YYYY-MM-DD
+        tvl_records = []
+        
+        # Загальний поточний TVL
+        total_tvl = tvl_data.get('tvl', 0)
+        if total_tvl > 0:
+            tvl_records.append({
+                'fetched_at': current_time,
+                'date': current_date,
+                'chain': 'total',
+                'tvl_usd': float(total_tvl)
+            })
+        
+        # TVL по окремих мережах (поточний)
+        chain_tvls = tvl_data.get('chainTvls', {})
+        for chain, tvl_value in chain_tvls.items():
+            if isinstance(tvl_value, (int, float)) and tvl_value > 0:
+                tvl_records.append({
+                    'fetched_at': current_time,
+                    'date': current_date,
+                    'chain': str(chain).lower(),
+                    'tvl_usd': float(tvl_value)
+                })
+        
+        if tvl_records:
+            df = pd.DataFrame(tvl_records)
+            save_data_with_deduplication(df, "extended_tvl_data.csv", ['date', 'chain'])
+        else:
+            print("⚠️ No valid TVL data to save")
+            
+    except Exception as e:
+        print(f"❌ Error processing TVL data: {e}")
+        print("TVL data structure:", tvl_data)
 
 def main():
     """Головна функція - збирає всі дані Extended біржі"""
