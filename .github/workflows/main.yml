@@ -2,8 +2,8 @@ name: Extended Exchange Data Collection
 
 on:
   schedule:
-    # Запускаємо кожні 6 годин
-    - cron: '0 */6 * * *'
+    # Запускаємо кожні 2 годин
+    - cron: '0 */2 * * *'
   workflow_dispatch:
     # Можна запустити вручну
   push:
