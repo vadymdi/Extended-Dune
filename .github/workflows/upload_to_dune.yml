@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
   schedule:
-    - cron: "0 */2 * * *"    # кожні 2 години
+    - cron: "0 */3 * * *"    # кожні 2 години
   workflow_dispatch:
 
 jobs:
