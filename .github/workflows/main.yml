@@ -2,8 +2,8 @@ name: Extended Exchange Data Collection
 
 on:
   schedule:
-    # Запускаємо кожні 2 години
-    - cron: "0 */2 * * *" 
+    # Запускаємо раз на тиждень (у понеділок о 00:00 UTC)
+    - cron: "0 0 * * 1"
   workflow_dispatch:
     # Можна запустити вручну
   push:
@@ -15,7 +15,8 @@ on:
 jobs:
   collect-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    # Змінено таймаут на 120 хвилин (2 години)
+    timeout-minutes: 120
     
     steps:
     - name: Checkout repository
