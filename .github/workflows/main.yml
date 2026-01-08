@@ -9,7 +9,8 @@ on:
   push:
     branches: [ main ]
     paths: 
-      - 'enhanced_fetch_data_to_dune.py'
+      # Слідкуємо за реальним файлом
+      - 'fetch_data_to_dune.py'
 
 jobs:
   collect-data:
@@ -34,7 +35,7 @@ jobs:
     - name: Run enhanced data collection
       run: |
         echo "🚀 Starting enhanced data collection..."
-        python enhanced_fetch_data_to_dune.py
+        python fetch_data_to_dune.py
         echo "✅ Data collection completed"
         
     - name: Check collected data
